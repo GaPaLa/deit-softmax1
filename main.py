@@ -185,6 +185,16 @@ def get_args_parser():
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
+
+    # training plotting parameters
+    parser.add_argument('--save-model-every-n-epochs', default=-1, type=int, dest='checkpoint_epochs', help='save multiple model checkpoints as we go, labelled by epoch')
+    parser.add_argument('--plot-patch-norms', action='store_true', dest='plot_norms', help='plot image patch norm per patch per layer per epoch for 100 random test images')
+    parser.add_argument('--plot-attention-maps', action='store_true', dest='plot_att', help='plot attention map per layer per epoch for 100 random test images')
+    parser.add_argument('--save-losses', action='store_true', dest='save_loss', help='plot train/val loss/acc during training')
+    parser.set_defaults(plot_norms=False)
+    parser.set_defaults(plot_att=False)
+    parser.set_defaults(save_loss=False)
+
     return parser
 
 
