@@ -117,3 +117,5 @@ I add:
   - "--plot-patch-norms" plot image patch norm per patch per layer per epoch for 100 random test images
   - "--plot-attention-maps" plot attention map per layer per epoch for 100 random test images
   - "--save-losses" plot train/val loss/acc during training
+
+requires timm 0.9.8
