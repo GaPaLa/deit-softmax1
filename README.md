@@ -109,5 +109,10 @@ If you find this repository useful, please consider giving a star ⭐ and cite t
 # License
 This repository is released under the Apache 2.0 license as found in the [LICENSE](LICENSE) file.
 
-# Contributing
-We actively welcome your pull requests! Please see [CONTRIBUTING.md](.github/CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md) for more info.
+# This Branch:
+This branch just adds some extra options for the purposes of testing how DEIT-III works with using softmax₁ in self attention from the Evan Miller's "Attention is Off by One" blog post https://www.evanmiller.org/attention-is-off-by-one.html
+I add:
+  - save multiple model checkpoints as we go, labelled by epoch
+  - "--plot-patch-norms=True" plot image patch norm per patch per layer per epoch for 100 random test images
+  - "--plot-attention-maps=True" plot attention map per layer per epoch for 100 random test images
+  - "--save-losses=True" plot train/val loss/acc during training
