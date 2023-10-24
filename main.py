@@ -352,9 +352,18 @@ def main(args):
             return x, attn_logits
         else:
             return x
-    def block_forward(self, x):
-        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
+    def block_forward(self, x, output_attentions=False):
+        # self attention block
+        if output_attentions:
+            attn_output, attn_weights = self.attn(self.norm1(x), output_attentions=output_attentions)
+            x = x + self.drop_path1(self.ls1(attn_output))
+        else:
+            x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
+        # MLP block
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
+        # output
+        if output_attentions:
+            return x, attn_weights
         return x
 
     def forward_features(self, x, output_attentions=False, output_patchnorms=False):
@@ -372,18 +381,33 @@ def main(args):
         patch_norms = []
         for blk in self.blocks:
             if output_attentions:
-                x, attn = blk(x, output_attentions)
+                x, attn = blk(x, output_attentions=output_attentions)
                 attn_maps.append(attn) 
             else:
                 x = blk(x)
             if output_patchnorms:
-                patch_norms.append(self.norm(x).norm(dim=-1))
+                patch_norms.append(x.norm(dim=-1))
 
         x = self.norm(x)
+        # for the purposes of this simple experiment, I'm only dealing with these 2 cases for the output
+        if output_attentions and output_patchnorms:
+            return x, attn_maps, patch_norms
         return x
+    
     def model_forward(self, x, output_attentions=False, output_patchnorms=False):
-        x = self.forward_features(x)
+
+        # pass through ViT
+        if output_attentions and output_patchnorms:
+            x, attentions, norms = self.forward_features(x, output_attentions=output_attentions, output_patchnorms=output_patchnorms)
+        else:
+            x = self.forward_features(x)
+
+        # output head
         x = self.forward_head(x)
+
+        # output
+        if output_attentions and output_patchnorms:
+            return x, attentions, norms
         return x
 
     # SWITCH OUT THE MODELS FUNCTIONS TO THE NEW CUSTOM ONES
