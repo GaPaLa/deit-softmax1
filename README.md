@@ -113,7 +113,9 @@ This repository is released under the Apache 2.0 license as found in the [LICENS
 This branch just adds some extra options for the purposes of testing how DEIT-III works when using softmax₁ (from the Evan Miller's "Attention is Off by One" blog post https://www.evanmiller.org/attention-is-off-by-one.html) during self attention.
 
 I add:
-  - "--save-model-every-n-epochs N" save multiple model checkpoints as we go, labelled by epoch
+  - "--save-model-every-n-epochs N" save multiple model checkpoints as we go, labelled by epoch (--output_dir must be set)
   - "--plot-patch-norms" plot image patch norm per patch per layer per epoch for 100 random test images
   - "--plot-attention-maps" plot attention map per layer per epoch for 100 random test images
   - "--save-losses" plot train/val loss/acc during training
+
+requires timm 0.9.8
