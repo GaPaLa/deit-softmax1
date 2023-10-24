@@ -1,0 +1,3 @@
+- might not need eval, loss plotter. they are printed to screen and might be written to disk - check in files as you run DEIT training code
+
+- modify VisionTransfoerm
