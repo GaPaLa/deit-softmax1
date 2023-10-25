@@ -29,8 +29,8 @@ def parse_args():
 
 def get_shared_folder() -> Path:
     user = os.getenv("USER")
-    if Path("/checkpoint/").is_dir():
-        p = Path(f"/checkpoint/{user}/experiments")
+    if Path("/tmp/job/").is_dir():
+        p = Path(f"/tmp/job/")
         p.mkdir(exist_ok=True)
         return p
     raise RuntimeError("No shared folder available")
@@ -82,7 +82,7 @@ class Trainer(object):
 def main():
     args = parse_args()
     if args.job_dir == "":
-        args.job_dir = get_shared_folder() / "%j"
+        args.job_dir = "/tmp/job" #get_shared_folder() / "%j"
 
     # Note that the folder will depend on the job_id, to easily track experiments
     executor = submitit.AutoExecutor(folder=args.job_dir, slurm_max_num_timeout=30)
@@ -111,16 +111,17 @@ def main():
         **kwargs
     )
 
-    executor.update_parameters(name="deit")
 
+
+    executor.update_parameters(name="deit")
     args.dist_url = get_init_file().as_uri()
     args.output_dir = args.job_dir
-
     trainer = Trainer(args)
-    job = executor.submit(trainer)
+    trainer()
+    #job = executor.submit(trainer)
+    #print("Submitted job_id:", job.job_id)
 
-    print("Submitted job_id:", job.job_id)
-
+    #subprocess.run(["xfce4-terminal", "--hold", "--command=python "+ script_path])
 
 if __name__ == "__main__":
     main()
