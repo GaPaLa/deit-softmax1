@@ -84,6 +84,7 @@ def main():
     if args.job_dir == "":
         args.job_dir = "/tmp/job" #get_shared_folder() / "%j"
 
+
     # Note that the folder will depend on the job_id, to easily track experiments
     executor = submitit.AutoExecutor(folder=args.job_dir, slurm_max_num_timeout=30)
 
@@ -112,14 +113,20 @@ def main():
     )
 
 
+    import sys
+    log_file = open('/tmp/job/job_log.txt', 'w')
+    sys.stdout = log_file
+    sys.stderr = log_file
 
     executor.update_parameters(name="deit")
     args.dist_url = get_init_file().as_uri()
     args.output_dir = args.job_dir
     trainer = Trainer(args)
-    trainer()
-    #job = executor.submit(trainer)
-    #print("Submitted job_id:", job.job_id)
+    #trainer()
+    job = executor.submit(trainer)
+    print("Submitted job_id:", job.job_id)
+    job.wait()  # Wait for the job to finish
+    log_file.close()
 
     #subprocess.run(["xfce4-terminal", "--hold", "--command=python "+ script_path])
 
