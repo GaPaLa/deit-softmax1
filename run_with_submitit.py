@@ -115,8 +115,8 @@ def main():
 
     import sys
     log_file = open('/tmp/job/job_log.txt', 'w')
-    sys.stdout = log_file
-    sys.stderr = log_file
+    stdout = log_file
+    stderr = log_file
 
     executor.update_parameters(name="deit")
     args.dist_url = get_init_file().as_uri()

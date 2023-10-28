@@ -473,12 +473,7 @@ def main(args):
         try:
             model.pos_embed.requires_grad = True
         except:
-            print('no position encoding')
-        try:
-            for p in model.patch_embed.parameters():
-                p.requires_grad = False
-        except:
-            print('no patch embed')
+            print('no   File "/home/idmi/deit-softmax1/main.py", line 503, in main patch embed')
             
     model.to(device)
 
