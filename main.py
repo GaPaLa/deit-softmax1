@@ -395,7 +395,7 @@ def main(args):
         return x
     
     def model_forward(self, x, output_attentions=False, output_patchnorms=False):
-
+        print('.')
         # pass through ViT
         if output_attentions and output_patchnorms:
             x, attentions, norms = self.forward_features(x, output_attentions=output_attentions, output_patchnorms=output_patchnorms)
@@ -410,6 +410,8 @@ def main(args):
             return x, attentions, norms
         return x
 
+    print(type(model))
+    print(model)
     # SWITCH OUT THE MODELS FUNCTIONS TO THE NEW CUSTOM ONES
     model.forward_features = forward_features
     model.forward = model_forward
