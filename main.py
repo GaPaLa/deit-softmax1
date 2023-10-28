@@ -411,13 +411,13 @@ def main(args):
         return x
 
     print(type(model))
-    print(model)
+    print(model.forward)
     # SWITCH OUT THE MODELS FUNCTIONS TO THE NEW CUSTOM ONES
-    model.forward_features = forward_features
-    model.forward = model_forward
-    for i in range(len(model.blocks)):
-        model.blocks[i].attn.forward = attn_forward# get attn map
-        model.blocks[i].forward = block_forward # get attn map
+    #model.forward_features = forward_features
+    #model.forward = model_forward
+    #for i in range(len(model.blocks)):
+    #    model.blocks[i].attn.forward = attn_forward# get attn map
+    #    model.blocks[i].forward = block_forward # get attn map
     
     # ===================================================================================================================== UGLY HACKING DONE
 
