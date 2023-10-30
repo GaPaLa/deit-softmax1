@@ -399,7 +399,7 @@ def main(args):
         # pass through ViT
         if output_attentions and output_patchnorms:
             x, attentions, norms = self.forward_features(x, output_attentions=output_attentions, output_patchnorms=output_patchnorms)
-        else:
+        else: 
             x = self.forward_features(x)
 
         # output head
