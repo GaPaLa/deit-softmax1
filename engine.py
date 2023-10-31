@@ -14,6 +14,9 @@ from timm.utils import accuracy, ModelEma
 
 from losses import DistillationLoss
 import utils
+import numpy as np
+import matplotlib.pyplot as plt
+import pickle
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
@@ -80,7 +83,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softmax1=False):
+def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softmax1=False, epoch=0):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -89,7 +92,7 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softm
     # switch to evaluation mode
     model.eval()
 
-    for images, target in metric_logger.log_every(data_loader, 10, header):
+    for i, (images, target) in enumerate(metric_logger.log_every(data_loader, 10, header)):
         images = images.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
@@ -105,35 +108,41 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softm
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
 
+        # eval uses SequentialDataLoader so we should be safe just saving the first N images. They may not be in the same order fif distributed but should still be the same ones. just check if its the same across multiple traiing runs for epoch 0
+        if i==0: # only save the first batch of images for eval - these will all be of the same class i think but still.
+            with open('job/'+str(epoch)+'_attn', 'rw') as file:
+                pickle.dump(attn_maps.to(torch.float16).cpu().numpy(), file)
+            print('BATCH FINGERPRINT:',images.mean(), images.std(), images[0].mean())
+            print('IMAGES SHAPE', images.shape())
+            plt.imshow(images[0].cpu().numpy())
 
 
 
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import random
 
-        np.random.seed(0)
-        num_layers = 10
-        B = 96  # batch dimension
-        N = 125  # token dimension
+    # convert to cpu, numpy
+    for i in range(len(norms)):            
+        norms[i] = norms[i].to(torch.float16).cpu().numpy()
+    # dump average norm for all layers, all tokens to file
+    with open('job/'+str(epoch)+'_mean_norms', 'rw') as file:
+        pickle.dump(norms, file)
+
+    if False:
+        num_layers = len(norms)
         y_axis_max = 400
-
-        # Generate random norm values for each layer
-        norm_values = [np.random.normal(random.randint(0,200), 40, (B, N)) for _ in range(num_layers)]
-
         # Create a heatmap array to store the frequency of values in each bin
         heatmap = np.zeros((y_axis_max, num_layers))
 
         # Calculate the histogram for each layer
         for layer in range(num_layers):
             # Flatten the norm values for the current layer
-            flat_norms = norm_values[layer].flatten()
+            flat_norms = norms[layer].flatten()
             
             # Calculate the 2D histogram
-            hist, edges = np.histogram(flat_norms, bins=y_axis_max, range=(0, y_axis_max))
+            hist, edges = np.histogram(flat_norms, bins=255, range=(0, 500))
             
             # Store the histogram in the heatmap
             heatmap[:,layer] = hist
+
 
         # Create the heatmap plot
         plt.imshow(heatmap, cmap='hot', origin='lower', aspect='auto', extent=[0, num_layers, 0, y_axis_max], interpolation='nearest')
