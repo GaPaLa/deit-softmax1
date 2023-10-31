@@ -10,7 +10,7 @@ from pathlib import Path
 
 import main as classification
 import submitit
-
+import time
 
 def parse_args():
     classification_parser = classification.get_args_parser()
@@ -125,8 +125,31 @@ def main():
     #trainer()
     job = executor.submit(trainer)
     print("Submitted job_id:", job.job_id)
+
+
+
+
+
+    # Define the log file paths
+    log_file_out = f'/tmp/job/{job.job_id}_0_log.out'
+    log_file_err = f'/tmp/job/{job.job_id}_0_log.err'
+
+
+    input("press q to kill the job")
+    job.cancel()
     job.wait()  # Wait for the job to finish
     log_file.close()
+
+
+    with open(log_file_err, 'r') as err_file:
+        print('======================================== ERROR FILE ========================================')
+        print(err_file.read())
+    with open(log_file_out, 'r') as out_file:
+        print('======================================== OUTPUT FILE ========================================')
+        print(out_file.read())
+
+
+
 
     #subprocess.run(["xfce4-terminal", "--hold", "--command=python "+ script_path])
 

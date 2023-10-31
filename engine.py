@@ -80,7 +80,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device, plot_norms=False, plot_att=False):
+def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softmax1=False):
     criterion = torch.nn.CrossEntropyLoss()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -95,7 +95,7 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False):
 
         # compute output
         with torch.cuda.amp.autocast():
-            output = model(images, output_attentions=True, output_patchnorms=True)
+            output, attn_maps, norms = model(images, output_attentions=plot_att, output_patchnorms=plot_norms, softmax1=softmax1)
             loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
@@ -104,6 +104,58 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False):
         metric_logger.update(loss=loss.item())
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
+
+
+
+
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import random
+
+        np.random.seed(0)
+        num_layers = 10
+        B = 96  # batch dimension
+        N = 125  # token dimension
+        y_axis_max = 400
+
+        # Generate random norm values for each layer
+        norm_values = [np.random.normal(random.randint(0,200), 40, (B, N)) for _ in range(num_layers)]
+
+        # Create a heatmap array to store the frequency of values in each bin
+        heatmap = np.zeros((y_axis_max, num_layers))
+
+        # Calculate the histogram for each layer
+        for layer in range(num_layers):
+            # Flatten the norm values for the current layer
+            flat_norms = norm_values[layer].flatten()
+            
+            # Calculate the 2D histogram
+            hist, edges = np.histogram(flat_norms, bins=y_axis_max, range=(0, y_axis_max))
+            
+            # Store the histogram in the heatmap
+            heatmap[:,layer] = hist
+
+        # Create the heatmap plot
+        plt.imshow(heatmap, cmap='hot', origin='lower', aspect='auto', extent=[0, num_layers, 0, y_axis_max], interpolation='nearest')
+        plt.colorbar(label='Frequency')
+        plt.xlabel('Layers')
+        plt.ylabel('Norm Values')
+        plt.title('Norm Values Heatmap')
+        plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print('* Acc@1 {top1.global_avg:.3f} Acc@5 {top5.global_avg:.3f} loss {losses.global_avg:.3f}'

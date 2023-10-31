@@ -23,21 +23,33 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x):
+    def forward(self, x, output_attentions=False, softmax1=False):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
         
         q = q * self.scale
-
         attn = (q @ k.transpose(-2, -1))
-        attn = attn.softmax(dim=-1)
+
+        if softmax1: # softmax1
+            attn_with_ghostlogit = torch.nn.functional.pad(attn, (0,1 , 0,1)) # add virtual 0 logit - effectively just adds 1 to denominator. Should be done in flash attention softmax.h CUDA kernel but that's hard and this repo doesnt use it anyway..
+            attn = attn_with_ghostlogit.softmax(dim=-1)[:,:,:-1,:-1] # remove virtual 0 logit
+        else: # vanilla softmax
+            attn = attn.softmax(dim=-1)
+        #print("ATTN_2 SHAPE", attn.shape) # [BSZ, heads, l, l]
+
+        if output_attentions:
+            attn_logits = attn.detach().clone()
+        else:
+            attn_logits = None
+
+
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        return x
+        return x, attn_logits
     
 class Block(nn.Module):
     # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -54,10 +66,11 @@ class Block(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp_block(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
+    def forward(self, x, output_attentions=False, softmax1=False):
+        x, attn_weights = self.attn(x=self.norm1(x), output_attentions=output_attentions, softmax1=softmax1)
+        x = x + self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x 
+        return x, attn_weights
     
 class Layer_scale_init_Block(nn.Module):
     # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -77,10 +90,11 @@ class Layer_scale_init_Block(nn.Module):
         self.gamma_1 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
         self.gamma_2 = nn.Parameter(init_values * torch.ones((dim)),requires_grad=True)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x)))
+    def forward(self, x, output_attentions=False, softmax1=False):
+        x, attn_weights = self.attn(self.norm1(x), output_attentions=output_attentions, softmax1=softmax1)
+        x + self.drop_path(self.gamma_1 * x)
         x = x + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x)))
-        return x
+        return x, attn_weights
 
 class Layer_scale_init_Block_paralx2(nn.Module):
     # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -240,30 +254,38 @@ class vit_models(nn.Module):
         self.num_classes = num_classes
         self.head = nn.Linear(self.embed_dim, num_classes) if num_classes > 0 else nn.Identity()
 
-    def forward_features(self, x):
+    def forward_features(self, x, output_attentions=False, softmax1=False, output_patchnorms=False):
         B = x.shape[0]
         x = self.patch_embed(x)
+        x = x + self.pos_embed
 
         cls_tokens = self.cls_token.expand(B, -1, -1)
         
-        x = x + self.pos_embed
-        
         x = torch.cat((cls_tokens, x), dim=1)
-            
+        
+        attn_maps = []
+        patch_norms = [x.norm(p=2, dim=-1).detach().clone()] # for each token, get the L2 norm of its embedding
         for i , blk in enumerate(self.blocks):
-            x = blk(x)
+            x, attn_weights = blk(x, output_attentions=output_attentions, softmax1=softmax1)
             
+            if output_attentions:
+                attn_maps.append(attn_weights)
+            if output_patchnorms:
+                patch_norms.append(x.norm(dim=-1).detach().clone())
+
         x = self.norm(x)
-        return x[:, 0]
+        return x[:, 0], attn_maps, patch_norms
 
-    def forward(self, x):
+    def forward(self, x, output_attentions=False, softmax1=False, output_patchnorms=False):
 
-        x = self.forward_features(x)
+        x, attn_maps, norms = self.forward_features(x, output_attentions=output_attentions, softmax1=softmax1, output_patchnorms=output_patchnorms)
         
         if self.dropout_rate:
             x = F.dropout(x, p=float(self.dropout_rate), training=self.training)
         x = self.head(x)
         
+        if output_attentions and output_patchnorms:
+            return x, attn_maps, norms
         return x
 
 # DeiT III: Revenge of the ViT (https://arxiv.org/abs/2204.07118)

@@ -189,8 +189,8 @@ def get_args_parser():
     # training plotting parameters
     parser.add_argument('--softmax1_attn', action='store_true', dest='softmax1_attn', help='use softmax1 from "Attention Is Off By One" during self attention')
     parser.add_argument('--save_nth_epoch', default=-1, type=int, dest='checkpoint_epochs', help='save multiple model checkpoints as we go, labelled by epoch - save checkpoint every Nth epoch')
-    parser.add_argument('--plot-patch-norms', action='store_true', dest='plot_norms', help='plot image patch norm per patch per layer per epoch for 100 random test images')
-    parser.add_argument('--plot-attention-maps', action='store_true', dest='plot_att', help='plot attention map per layer per epoch for 100 random test images')
+    parser.add_argument('--plot_norms', action='store_true', dest='plot_norms', help='plot image patch norm per patch per layer per epoch for 100 random test images')
+    parser.add_argument('--plot_attentions', action='store_true', dest='plot_att', help='plot attention map per layer per epoch for 100 random test images')
     parser.add_argument('--save-losses', action='store_true', dest='save_loss', help='plot train/val loss/acc during training')
     parser.set_defaults(plot_norms=False)
     parser.set_defaults(plot_att=False)
@@ -280,146 +280,6 @@ def main(args):
         drop_block_rate=None,
         img_size=args.input_size
     )
-
-
-
-
-    # ===================================================================================================================== UGLY HACKING BEGIN
-    # ---------- UGLY HACK CODE: we need to fetch the norm of each patch and get attention maps from the model during eval; 
-    # the timm models by default do not have output_attention or output_hidden_states like the transformers library LLMs do - I'll have to add it manually. 
-    # but I dont want to have to create another branch for timm to do this, so Ill just grab take the timm model produced by the code above, 
-    # take its functions source code from the original library, and re-implement them with the required functionality, and re-assign the necessary functions in the model to these new re-implemented functions 
-    # NOTE: this code assumes the timm we are modifying is version 0.9.8 - might break other code otherwise if they change the forward() methods of their VisionTransformer/Attention/Block class
-    # model should be of class VisionTransformer
-    def attn_forward(self, x, output_attentions=False):
-        B, N, C = x.shape
-        # Combined MLP fc1 & qkv projections
-        y = self.in_norm(x)
-        if self.mlp_bias is not None:
-            # Concat constant zero-bias for qkv w/ trainable mlp_bias.
-            # Appears faster than adding to x_mlp separately
-            y = torch.nn.functional.linear(y, self.in_proj.weight, torch.cat((self.qkv_bias, self.mlp_bias)))
-        else:
-            y = self.in_proj(y)
-        x_mlp, q, k, v = torch.split(y, self.in_split, dim=-1)
-        # Dot product attention w/ qk norm
-        q = self.q_norm(q.view(B, N, self.num_heads, self.head_dim)).transpose(1, 2)
-        k = self.k_norm(k.view(B, N, self.num_heads, self.head_dim)).transpose(1, 2)
-        v = v.view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Softmax1 - Attention Is Off By One
-        if args.softmax1_attn: 
-            # working on softmax1 for flash attention...
-            #if self.fused_attn:
-            #    x_attn = torch.nn.functional.scaled_dot_product_attention(q,k,v,   dropout_p=self.attn_drop.p if self.training else 0.,)
-            q = q * self.scale
-            attn = q @ k.transpose(-2, -1)
-
-            # SOFTMAX1
-            # as mentioned in Attention is Off by One, actually adding 1 to the denominator in the softmax operator would require going into the CUDA code for softmax and editing its forward and backward passes - idk CUDA code so for proof of concept we add a logit of value zero to the input of softmax which has the same effect as adding 1 to the denominator (as long as we remember to remove it after the softmax operation)
-            attn_with_ghostlogit = torch.nn.functional.pad(attn, (0,1 , 0,1))
-            attn = attn_with_ghostlogit.softmax(dim=-1)[:,:,:-1,:-1]
-            if output_attentions:
-                attn_logits = attn.detach().clone
-            # NOTE: this ^ holds the attention scores we want to record!
-
-            attn = self.attn_drop(attn)
-            x_attn = attn @ v
-
-        # normal softmax
-        else:
-            if self.fused_attn and not output_attentions: # outputting attentinos does not work with flash attention
-                x_attn = torch.nn.functional.scaled_dot_product_attention(q,k,v, dropout_p=self.attn_drop.p if self.training else 0.,)
-            else:
-                q = q * self.scale
-                attn = q @ k.transpose(-2, -1)
-                attn = attn.softmax(dim=-1)
-                if output_attentions:
-                    attn_logits = attn.detach().clone
-                # NOTE: this ^ holds the attention scores we want to record!
-                attn = self.attn_drop(attn)
-                x_attn = attn @ v
-        x_attn = x_attn.transpose(1, 2).reshape(B, N, C)
-        x_attn = self.attn_out_proj(x_attn)
-        # MLP activation, dropout, fc2
-        x_mlp = self.mlp_act(x_mlp)
-        x_mlp = self.mlp_drop(x_mlp)
-        x_mlp = self.mlp_out_proj(x_mlp)
-        # Add residual w/ drop path & layer scale applied
-        y = self.drop_path(self.ls(x_attn + x_mlp))
-        x = x + y
-        if output_attentions:
-            return x, attn_logits
-        else:
-            return x
-    def block_forward(self, x, output_attentions=False):
-        # self attention block
-        if output_attentions:
-            attn_output, attn_weights = self.attn(self.norm1(x), output_attentions=output_attentions)
-            x = x + self.drop_path1(self.ls1(attn_output))
-        else:
-            x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x))))
-        # MLP block
-        x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
-        # output
-        if output_attentions:
-            return x, attn_weights
-        return x
-
-    def forward_features(self, x, output_attentions=False, output_patchnorms=False):
-        x = self.patch_embed(x)
-        x = self._pos_embed(x)
-        x = self.patch_drop(x)
-        x = self.norm_pre(x)
-        
-        #if self.grad_checkpointing and not torch.jit.is_scripting():
-        #    x = checkpoint_seq(self.blocks, x)
-        #else:
-        
-        #x = self.blocks(x)
-        attn_maps = []
-        patch_norms = []
-        for blk in self.blocks:
-            if output_attentions:
-                x, attn = blk(x, output_attentions=output_attentions)
-                attn_maps.append(attn) 
-            else:
-                x = blk(x)
-            if output_patchnorms:
-                patch_norms.append(x.norm(dim=-1))
-
-        x = self.norm(x)
-        # for the purposes of this simple experiment, I'm only dealing with these 2 cases for the output
-        if output_attentions and output_patchnorms:
-            return x, attn_maps, patch_norms
-        return x
-    
-    def model_forward(self, x, output_attentions=False, output_patchnorms=False):
-        print('.')
-        # pass through ViT
-        if output_attentions and output_patchnorms:
-            x, attentions, norms = self.forward_features(x, output_attentions=output_attentions, output_patchnorms=output_patchnorms)
-        else: 
-            x = self.forward_features(x)
-
-        # output head
-        x = self.forward_head(x)
-
-        # output
-        if output_attentions and output_patchnorms:
-            return x, attentions, norms
-        return x
-
-    print(type(model))
-    print(model.forward)
-    # SWITCH OUT THE MODELS FUNCTIONS TO THE NEW CUSTOM ONES
-    #model.forward_features = forward_features
-    #model.forward = model_forward
-    #for i in range(len(model.blocks)):
-    #    model.blocks[i].attn.forward = attn_forward# get attn map
-    #    model.blocks[i].forward = block_forward # get attn map
-    
-    # ===================================================================================================================== UGLY HACKING DONE
 
 
 
@@ -557,10 +417,10 @@ def main(args):
             if 'scaler' in checkpoint:
                 loss_scaler.load_state_dict(checkpoint['scaler'])
         lr_scheduler.step(args.start_epoch)
-    if args.eval:
+
+    if True: # plot norms, attention at init
         test_stats = evaluate(data_loader_val, model, device, plot_norms=args.plot_norms, plot_att=args.plot_att)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
-        return
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
