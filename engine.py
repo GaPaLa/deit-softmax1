@@ -108,22 +108,33 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softm
         metric_logger.meters['acc1'].update(acc1.item(), n=batch_size)
         metric_logger.meters['acc5'].update(acc5.item(), n=batch_size)
 
+
         # eval uses SequentialDataLoader so we should be safe just saving the first N images. They may not be in the same order fif distributed but should still be the same ones. just check if its the same across multiple traiing runs for epoch 0
+        print('norm mean,std',torch.cat(norms).mean().item(), torch.cat(norms).std().item())
         if i==0: # only save the first batch of images for eval - these will all be of the same class i think but still.
-            with open('job/'+str(epoch)+'_attn', 'rw') as file:
-                pickle.dump(attn_maps.to(torch.float16).cpu().numpy(), file)
+            
+            # save attentions for first batch of evals
+            with open('/mnt/imgnet/job/'+str(epoch)+'_attn.npy', 'wb') as file:
+                pickle.dump([attmap.to(torch.float16).cpu().numpy() for attmap in attn_maps], file)
+            
+            # plot images for first batch of evals
             print('BATCH FINGERPRINT:',images.mean(), images.std(), images[0].mean())
-            print('IMAGES SHAPE', images.shape())
-            plt.imshow(images[0].cpu().numpy())
+            plt.imshow(images[0].permute(1,2,0).cpu().numpy())
+            plt.savefig(f'/mnt/imgnet/job/{i, epoch}_image0.png')
+            
+            # plot images for first batch of evals
+            print('ATTN SHAPE', attn_maps[-1][0].shape, attn_maps[-1][0].mean(), attn_maps[-1][0].std())
+            plt.imshow(attn_maps[-1][0][0].cpu().numpy())
+            plt.savefig(f'/mnt/imgnet/job/{i, epoch}_attn0.png')
+            1/0
 
 
 
 
-    # convert to cpu, numpy
-    for i in range(len(norms)):            
+    # convert to cpu, nvit need registersnorms)):            
         norms[i] = norms[i].to(torch.float16).cpu().numpy()
     # dump average norm for all layers, all tokens to file
-    with open('job/'+str(epoch)+'_mean_norms', 'rw') as file:
+    with open('/mnt/imgnet/job/'+str(epoch)+'_mean_norms.npy', 'wb') as file:
         pickle.dump(norms, file)
 
     if False:

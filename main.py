@@ -191,7 +191,7 @@ def get_args_parser():
     parser.add_argument('--save_nth_epoch', default=-1, type=int, dest='checkpoint_epochs', help='save multiple model checkpoints as we go, labelled by epoch - save checkpoint every Nth epoch')
     parser.add_argument('--plot_norms', action='store_true', dest='plot_norms', help='plot image patch norm per patch per layer per epoch for 100 random test images')
     parser.add_argument('--plot_attentions', action='store_true', dest='plot_att', help='plot attention map per layer per epoch for 100 random test images')
-    parser.add_argument('--save-losses', action='store_true', dest='save_loss', help='plot train/val loss/acc during training')
+    parser.add_argument('--save_losses', action='store_true', dest='save_loss', help='plot train/val loss/acc during training')
     parser.set_defaults(plot_norms=False)
     parser.set_defaults(plot_att=False)
     parser.set_defaults(save_loss=False)
