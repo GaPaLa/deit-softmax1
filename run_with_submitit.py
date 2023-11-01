@@ -114,7 +114,7 @@ def main():
 
 
     import sys
-    log_file = open('/tmp/job/job_log.txt', 'w')
+    log_file = open('/mnt/imgnet/job/job_log.txt', 'w')
     stdout = log_file
     stderr = log_file
 
@@ -131,8 +131,8 @@ def main():
 
 
     # Define the log file paths
-    log_file_out = f'/tmp/job/{job.job_id}_0_log.out'
-    log_file_err = f'/tmp/job/{job.job_id}_0_log.err'
+    log_file_out = f'/mnt/imgnet/job/{job.job_id}_0_log.out'
+    log_file_err = f'/mnt/imgnet/job/{job.job_id}_0_log.err'
 
 
     #input("press q to kill the job")

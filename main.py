@@ -421,11 +421,11 @@ def main(args):
 
     # initialization plots
     if True: # plot norms, attention at init
-        test_stats = evaluate(data_loader_val, model, device, plot_norms=args.plot_norms, plot_att=args.plot_att, epoch=0)
+        test_stats = evaluate(data_loader_val, model, device, plot_norms=args.plot_norms, plot_att=args.plot_att, epoch=0, softmax1=args.softmax1_attn)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
     # reset norms log
     with open('/mnt/imgnet/job/mean_train_norms.txt','w') as file:
-        file.write()
+        file.write('')
 
 
     print(f"Start training for {args.epochs} epochs")
@@ -441,6 +441,7 @@ def main(args):
             args.clip_grad, model_ema, mixup_fn,
             set_training_mode=args.train_mode,  # keep in eval mode for deit finetuning / train mode for training and deit III finetuning
             args = args,
+            softmax1=args.softmax1_attn
         )
 
         lr_scheduler.step(epoch)
@@ -472,7 +473,7 @@ def main(args):
                     }, checkpoint_path.split('.pth')[0] + f'_@epoch:{epoch}_' + '.pth')
              
 
-        test_stats = evaluate(data_loader_val, model, device, plot_norms=args.plot_norms, plot_att=args.plot_att, epoch=epoch)
+        test_stats = evaluate(data_loader_val, model, device, plot_norms=args.plot_norms, plot_att=args.plot_att, epoch=epoch, softmax1=args.softmax1_attn)
         print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
         
         if max_accuracy < test_stats["acc1"]:
