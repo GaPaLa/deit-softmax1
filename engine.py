@@ -47,7 +47,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             targets = targets.gt(0.0).type(targets.dtype)
          
         with torch.cuda.amp.autocast():
-            outputs = model(x=samples)
+            outputs, attn_maps, norms = model(x=samples, output_patchnorms=True, output_attentions=True)
             if not args.cosub:
                 loss = criterion(samples, outputs, targets)
             else:
@@ -76,6 +76,12 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
 
         metric_logger.update(loss=loss_value)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+        # plot model norm
+        with open('/mnt/imgnet/job/mean_train_norms.txt','a') as file:
+            file.write(norms[-1].mean(dim=0).cpu().numpy().tolist(),'\n')
+
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
@@ -115,7 +121,10 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softm
             
             # save attentions for first batch of evals
             with open('/mnt/imgnet/job/'+str(epoch)+'_attn.npy', 'wb') as file:
-                pickle.dump([attmap.to(torch.float16).cpu().numpy() for attmap in attn_maps], file)
+                pickle.dump([attmap.cpu().numpy() for attmap in attn_maps], file)
+            # save attentions for first batch of evals
+            with open('/mnt/imgnet/job/'+str(epoch)+'_norms.npy', 'wb') as file:
+                pickle.dump([normlayer.cpu().numpy() for normlayer in norms], file)
             
             # plot images for first batch of evals
             print('BATCH FINGERPRINT:',images.mean(), images.std(), images[0].mean())
@@ -126,8 +135,6 @@ def evaluate(data_loader, model, device, plot_norms=False, plot_att=False, softm
             print('ATTN SHAPE', attn_maps[-1][0].shape, attn_maps[-1][0].mean(), attn_maps[-1][0].std())
             plt.imshow(attn_maps[-1][0][0].cpu().numpy())
             plt.savefig(f'/mnt/imgnet/job/{i, epoch}_attn0.png')
-            1/0
-
 
 
 

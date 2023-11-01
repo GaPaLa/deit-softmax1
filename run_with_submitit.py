@@ -135,8 +135,8 @@ def main():
     log_file_err = f'/tmp/job/{job.job_id}_0_log.err'
 
 
-    input("press q to kill the job")
-    job.cancel()
+    #input("press q to kill the job")
+    #job.cancel()
     job.wait()  # Wait for the job to finish
     log_file.close()
 
